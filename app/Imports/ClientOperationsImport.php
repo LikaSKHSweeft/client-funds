@@ -6,6 +6,7 @@ use App\Enums\ClientType;
 use App\Enums\OperationType;
 use App\Interfaces\Currency\CurrencyProviderFactory;
 use App\Interfaces\Operations\OperandClientFactory;
+use App\Services\ExchangeOperations;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
@@ -15,10 +16,22 @@ use Illuminate\Validation\Rule;
 class ClientOperationsImport implements ToCollection, WithHeadingRow, WithValidation
 {
     private array $rates;
+    private array $clients;
+    private array $commissions;
 
     public function __construct()
     {
         $this->rates = [];
+        $this->clients = [];
+        $this->commissions = [];
+    }
+
+    /**
+     * @return array
+     */
+    public function getCommissions(): array
+    {
+        return $this->commissions;
     }
 
     /**
@@ -27,19 +40,28 @@ class ClientOperationsImport implements ToCollection, WithHeadingRow, WithValida
      */
     public function collection(Collection $collection)
     {
-        foreach ($collection as $row) {
+        foreach ($collection as $key => $row) {
             if (strtoupper($row['operation_type']) == OperationType::DEPOSIT->name) {
-                $deposit = OperandClientFactory::getOperandClient(strtoupper($row['client_type']))->deposit(
+                $this->commissions[$key] = OperandClientFactory::getOperandClient(
+                    strtoupper($row['client_type'])
+                )->deposit(
                     $row['amount']
                 );
-
-                dump($deposit);
             } else {
                 if (!sizeof($this->rates)) {
                     $this->rates = CurrencyProviderFactory::getCurrencyRateProvider()->call();
                 }
 
-                $w = OperandClientFactory::getOperandClient(strtoupper($row['client_type']))->withdraw($row, $this->rates);
+                switch (strtoupper($row['client_type'])) {
+                    case ClientType::BUSINESS->name:
+                        $this->commissions[$key] = OperandClientFactory::getOperandClient(
+                            ClientType::BUSINESS->name
+                        )->withdraw($row);
+                        break;
+                    case ClientType::PRIVATE->name:
+                        $this->handlePrivateWithdraw($row, $key, count($collection));
+                        break;
+                }
             }
         }
     }
@@ -54,5 +76,35 @@ class ClientOperationsImport implements ToCollection, WithHeadingRow, WithValida
             'date' => 'required',
             'amount' => 'required',
         ];
+    }
+
+    /**
+     * @throws \Exception
+     */
+    private function setClientsData($row, $key)
+    {
+        $exchange = new ExchangeOperations();
+
+        $this->clients[$row['client']][] = [
+            'date' => $row['date'],
+            'amount' => $exchange->calculateExchangeRate($row, $this->rates),
+            'order' => $key
+        ];
+    }
+
+    /**
+     * @throws \Exception
+     */
+    private function handlePrivateWithdraw($row, $key, $count)
+    {
+        $this->setClientsData($row, $key);
+
+        if ($count - 1 <= $key) {
+            $data = OperandClientFactory::getOperandClient(
+                ClientType::PRIVATE->name
+            )->withdraw($this->clients);
+
+            $this->commissions = array_merge($data, $this->commissions);
+        }
     }
 }

@@ -13,7 +13,7 @@ class BusinessClient implements OperandClientInterface
         return $this->depositPercentageCalculator($amount);
     }
 
-    public function withdraw($data, $rates = null): float
+    public function withdraw($data): float
     {
         return $this->ceilUp($data['amount'] / 100 * config('percentages.clients_withdraw.business.fee'));
     }

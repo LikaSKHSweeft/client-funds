@@ -8,13 +8,16 @@ use App\Services\ProcessClientOperation;
 class ProcessClientOperationController extends Controller
 {
     private ProcessClientOperation $operationService;
+
     public function __construct(ProcessClientOperation $operationService)
     {
         $this->operationService = $operationService;
     }
 
-    public function __invoke(ProcessClientOperationRequest $request)
+    public function __invoke(ProcessClientOperationRequest $request): \Illuminate\Http\JsonResponse
     {
-        $this->operationService->process($request);
+        return response()->json([
+            'data' => $this->operationService->process($request)
+        ]);
     }
 }

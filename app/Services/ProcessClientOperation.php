@@ -8,10 +8,15 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class ProcessClientOperation
 {
-    public function process(ProcessClientOperationRequest $request): void
+    public function process(ProcessClientOperationRequest $request)
     {
         $data = $request->validated();
+        $commissions = new ClientOperationsImport();
 
-        Excel::import(new ClientOperationsImport(), $data['operations']);
+        Excel::import($commissions, $data['operations']);
+
+        return collect($commissions->getCommissions())->map(function ($e) {
+            return number_format($e, 2);
+        });
     }
 }
