@@ -16,15 +16,21 @@ class PrivateClient implements OperandClientInterface
         $this->service = new ExchangeOperations();
     }
 
+    /**
+     * Handles deposit for private client
+     * @param $amount
+     * @return float
+     */
     public function deposit($amount): float
     {
         return $this->depositPercentageCalculator($amount);
     }
 
     /**
+     * Handles withdraw for private client
      * @throws \Exception
      */
-    public function withdraw($data): array
+    public function withdraw($data, $rates): array
     {
         $calculatedCommissions = [];
 
@@ -38,12 +44,13 @@ class PrivateClient implements OperandClientInterface
 
             foreach ($client as $operation) {
                 $key = $this->generateKey($operation['date']);
-
                 $commissions[$key] = $this->buildCommissionsData($key, $operation, $commissions);
 
                 $calculatedCommissions[$operation['order']] = $this->validateCommission(
                     $operation['amount'],
-                    $commissions[$key]
+                    $commissions[$key],
+                    $operation['currency'],
+                    $rates
                 );
             }
         }
@@ -51,24 +58,38 @@ class PrivateClient implements OperandClientInterface
         return $calculatedCommissions;
     }
 
-    private function validateCommission($amount, $commission): float
+    /**
+     * Validates how much commission fee should be set for transaction
+     * @throws \Exception
+     */
+    private function validateCommission($amount, $commission, $currency, $rates): float
     {
-        if ($commission['count'] <= 3 && $commission['amount'] <= 1000) {
+        $operationsPerWeek = config('percentages.clients_withdraw.private.free_operations_per_week');
+        $freeOperationsPerWeek = config('percentages.clients_withdraw.private.free_amount_per_week');
+
+        if ($commission['count'] <= $operationsPerWeek && $commission['amount'] <= $freeOperationsPerWeek) {
             return 0;
         }
 
-        if ($commission['count'] > 3) {
-            return $this->withdrawPercentageCalculator($amount);
+        if ($commission['count'] > $operationsPerWeek) {
+            return $this->withdrawPercentageCalculator($amount, $rates, $currency);
         }
 
         $lastOperation = $commission['amount'] - $amount;
 
         return $this->withdrawPercentageCalculator(
-            $lastOperation >= 1000 ?
-                $amount : $commission['amount'] - 1000
+            $lastOperation >= $freeOperationsPerWeek ?
+                $amount : $commission['amount'] - $freeOperationsPerWeek,
+            $rates,
+            $currency
         );
     }
 
+    /**
+     * Generates key for array according to start and end dates of date of provided transaction
+     * @param $date
+     * @return string
+     */
     private function generateKey($date): string
     {
         return date("Y-m-d", strtotime('monday this week', strtotime($date)))
@@ -76,6 +97,13 @@ class PrivateClient implements OperandClientInterface
             date("Y-m-d", strtotime('sunday this week', strtotime($date)));
     }
 
+    /**
+     * Build data for commissions
+     * @param $key
+     * @param $operation
+     * @param $commissions
+     * @return array
+     */
     private function buildCommissionsData($key, $operation, $commissions): array
     {
         return [

@@ -27,6 +27,7 @@ class ClientOperationsImport implements ToCollection, WithHeadingRow, WithValida
     }
 
     /**
+     * getter for commissions
      * @return array
      */
     public function getCommissions(): array
@@ -35,12 +36,23 @@ class ClientOperationsImport implements ToCollection, WithHeadingRow, WithValida
     }
 
     /**
+     * setter for rates
+     * @param array $rates
+     */
+    public function setRates(array $rates): void
+    {
+        $this->rates = $rates;
+    }
+
+    /**
+     * Go through each csv row
      * @param Collection $collection
      * @throws \Exception
      */
     public function collection(Collection $collection)
     {
         foreach ($collection as $key => $row) {
+            //operations for deposit
             if (strtoupper($row['operation_type']) == OperationType::DEPOSIT->name) {
                 $this->commissions[$key] = OperandClientFactory::getOperandClient(
                     strtoupper($row['client_type'])
@@ -48,10 +60,12 @@ class ClientOperationsImport implements ToCollection, WithHeadingRow, WithValida
                     $row['amount']
                 );
             } else {
+                //operations for withdraw
                 if (!sizeof($this->rates)) {
                     $this->rates = CurrencyProviderFactory::getCurrencyRateProvider()->call();
                 }
 
+                //according to client type operation is either being calculated right away or handed over to handlePrivateWithdraw function
                 switch (strtoupper($row['client_type'])) {
                     case ClientType::BUSINESS->name:
                         $this->commissions[$key] = OperandClientFactory::getOperandClient(
@@ -66,6 +80,10 @@ class ClientOperationsImport implements ToCollection, WithHeadingRow, WithValida
         }
     }
 
+    /**
+     * validation for csv file
+     * @return array
+     */
     public function rules(): array
     {
         return [
@@ -79,6 +97,7 @@ class ClientOperationsImport implements ToCollection, WithHeadingRow, WithValida
     }
 
     /**
+     * Calculates exchanged amount for base currency price and creates array for client to be processed later
      * @throws \Exception
      */
     private function setClientsData($row, $key)
@@ -88,23 +107,29 @@ class ClientOperationsImport implements ToCollection, WithHeadingRow, WithValida
         $this->clients[$row['client']][] = [
             'date' => $row['date'],
             'amount' => $exchange->calculateExchangeRate($row, $this->rates),
-            'order' => $key
+            'currency' => $row['currency'],
+            'order' => $key,
+            'client' => $row['client']
         ];
     }
 
     /**
+     * Handles private client withdraw operations
      * @throws \Exception
      */
     private function handlePrivateWithdraw($row, $key, $count)
     {
+        //Create data for clients
         $this->setClientsData($row, $key);
 
         if ($count - 1 <= $key) {
             $data = OperandClientFactory::getOperandClient(
                 ClientType::PRIVATE->name
-            )->withdraw($this->clients);
+            )->withdraw($this->clients, $this->rates);
+            $this->commissions = $this->commissions + $data;
 
-            $this->commissions = array_merge($data, $this->commissions);
+            //Sort commissions array per input order
+            ksort($this->commissions);
         }
     }
 }
