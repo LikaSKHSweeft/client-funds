@@ -1,0 +1,49 @@
+{
+	"info": {
+		"_postman_id": "5ff67c0f-a43b-48a7-a1ad-663281c4b185",
+		"name": "funds",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "4269660"
+	},
+	"item": [
+		{
+			"name": "http://127.0.0.1:8000/api/process-operations",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "operations",
+							"type": "file",
+							"src": "operations.csv"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://127.0.0.1:8000/api/process-operations",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"process-operations"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
